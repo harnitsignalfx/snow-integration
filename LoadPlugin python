@@ -1,0 +1,10 @@
+LoadPlugin python
+<Plugin python>
+  ModulePath "/usr/share/collectd/snow-plugin"
+  Import "xmlStats"
+  <Module xmlStats>
+    Path "http://localhost:8080/snow/xmlstats.do.xml"
+    Interval 10
+    Timeout 5
+  </Module>
+</Plugin>
