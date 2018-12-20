@@ -4,23 +4,52 @@ import xml.etree.ElementTree as ET
 import sys
 import time
 import collectd
+import six
 
 INTERVAL = 10
 PATH = ''
 TIMEOUT = 10
 PLUGIN = 'SNOW-XML'
 
+default_dimensions = {}
+metricType = 'semaphores'
+
 def parseXML(file):
 	semaphores = []
+	global default_dimensions
+	
 	try:
 		root = ET.fromstring(file)
-	
 		for semaphore in root.findall('./semaphores'):
 			semaphores.append(semaphore)
+		for instance_id in root.findall('./instance_id'):
+			default_dimensions['instanceId'] = instance_id.text
+		for instance_name in root.findall('./instance_name'):
+			default_dimensions['instanceName'] = instance_name.text	
 	except Exception as e:
 		collectd.error('Failed to parse XML file %s' % (e))
 	
 	return semaphores
+
+def format_dimensions(dimensions, more_dimensions=''):
+    '''
+    Formats dimensions before fed to collectd plugin instance
+    '''
+    formatted = []
+    formatted.extend(("%s=%s" % (k, v)) for k, v in six.iteritems(dimensions))
+    return ('[%s%s]' % (str(formatted).replace('\'', '').
+            replace(' ', '').replace("\"", '').replace('[', '').
+                replace(']', ''),
+                '' if len(more_dimensions) == 1 else more_dimensions))
+
+
+def prepare_plugin_instance(attribute, default_dimensions, more_dimensions=''):
+    '''
+    Prepares the plugin instance string to be passed to collectd
+    '''
+    default_dimensions = format_dimensions(default_dimensions,
+        (more_dimensions))
+    return ("%s%s" % (attribute, default_dimensions))
 
 
 def config_callback(conf):
@@ -81,8 +110,12 @@ def read_callback():
 		collectd.error('Failed to fetch and transfer data due to %s' % (e))
 
 def dispatch_values(name,stats,values):
+	global default_dimensions
+	global metricType
+	default_dimensions['element']=name
+
 	val = collectd.Values(type='gauge')
-	val.plugin_instance = name
+	val.plugin_instance = prepare_plugin_instance(metricType,default_dimensions)
 	val.plugin = PLUGIN
 	
 	for iter in range(len(stats)):
